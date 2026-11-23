@@ -167,6 +167,35 @@ ${tbl(["Estilo","Cómo funciona","Conviene para","Cuidado con"],[
 ["Hexagonal (puertos y adaptadores)","El núcleo de negocio no conoce la base de datos ni la interfaz; se conecta por puertos","Sistemas que cambian de tecnología o necesitan pruebas aisladas","Más clases e interfaces"],
 ["Peer to peer","Todos los nodos son cliente y servidor","Compartir archivos, blockchain","Seguridad y coherencia de datos"],
 ["Serverless","Funciones que se ejecutan por evento; el proveedor escala","Cargas esporádicas o impredecibles","Arranque en frío, dependencia del proveedor"]])}`],
+["Arquitectura orientada a eventos (EDA)",`<p>Una tienda en línea confirma un pedido. En ese momento deben pasar varias cosas: inventario aparta los productos, facturación emite el CFDI, notificaciones manda un correo y, el próximo mes, marketing quiere sumar puntos de lealtad. Si el servicio de Pedidos llamara uno por uno a todos, tendría que conocerlos, esperar a cada uno y cambiar su código cada vez que llega uno nuevo. Si facturación está caída, el pedido fallaría.</p>
+<p>En una <b>arquitectura orientada a eventos</b>, Pedidos solo <b>publica un hecho</b> (“PedidoConfirmado”) en un intermediario y sigue con su trabajo. Quien esté interesado se suscribe y reacciona por su cuenta.</p>
+${svg(660,220,`${B(10,90,130,50,"Pedidos\n(productor)","l2")}${A(140,115,200,115,null,"publica")}${B(200,70,170,90,"Broker\ntema: PedidoConfirmado","hl")}${A(370,100,440,40)}${A(370,115,440,115)}${A(370,130,440,190)}${B(440,18,200,44,"Inventario (aparta)")}${B(440,93,200,44,"Facturación (CFDI)")}${B(440,168,200,44,"Notificaciones (correo)")}`,"El productor no sabe quién consume. Agregar el servicio de lealtad es solo suscribir un consumidor nuevo.")}
+${tbl(["Elemento","Qué es"],[
+["Evento","Un hecho que ya ocurrió; se nombra en pasado y no cambia: PedidoConfirmado, PagoRechazado"],
+["Productor","Quien detecta el hecho y lo publica"],
+["Broker o bus de eventos","Intermediario que recibe, guarda y entrega los eventos (Kafka, RabbitMQ, Amazon SNS/SQS, Google Pub/Sub)"],
+["Consumidor","Quien se suscribe y reacciona; puede haber cero, uno o muchos"],
+["Tema (topic) o canal","Categoría a la que se publica y a la que se suscriben los consumidores"]])}
+<p><b>Dos formas de entregar mensajes</b> que el examen distingue:</p>
+${tbl(["Modelo","Quién recibe cada mensaje","Ejemplo"],[
+["Publicar/suscribir (topic)","<b>Todos</b> los suscriptores reciben su copia","PedidoConfirmado llega a inventario, facturación y notificaciones"],
+["Cola punto a punto","<b>Solo uno</b> de los consumidores del grupo (consumidores en competencia)","Cinco trabajadores comparten la cola de “generar PDF”; cada factura la procesa uno"]])}
+<p><b>Ventajas</b>: bajo acoplamiento (productor y consumidores no se conocen), extensibilidad (nuevos consumidores sin tocar al productor), escalabilidad (cada consumidor escala por separado), resiliencia (si un consumidor está caído, los eventos lo esperan en el broker) y procesamiento asíncrono.</p>
+<p><b>Retos</b>, que son los que más preguntan:</p>
+${tbl(["Reto","Qué pasa","Cómo se atiende"],[
+["Consistencia eventual","Durante un momento, inventario ya apartó y facturación aún no emite","Diseñar la interfaz y el negocio para tolerar ese retraso"],
+["Mensajes duplicados","Con entrega “al menos una vez”, un consumidor puede recibir el mismo evento dos veces","Consumidores <b>idempotentes</b>: guardar el id del evento ya procesado"],
+["Orden de los eventos","PedidoCancelado podría llegar antes que PedidoConfirmado","Particionar por id de pedido o versionar los eventos"],
+["Rastrear el flujo","Una operación se reparte en muchos eventos y servicios","Id de correlación, trazas distribuidas y bitácoras centralizadas"],
+["Mensajes que siempre fallan","Un evento mal formado hace fallar al consumidor una y otra vez","Reintentos limitados y una cola de mensajes muertos (dead letter queue)"],
+["Transacciones entre servicios","No hay un COMMIT que abarque pagos, inventario y envío","Patrón <b>Saga</b>: cada paso publica un evento y, si uno falla, se ejecutan acciones de compensación (reembolsar, liberar inventario)"]])}
+<p><b>Patrones relacionados</b>:</p>
+${tbl(["Patrón","Idea","Cuándo"],[
+["Notificación de evento","El evento solo avisa (“cambió el pedido 15”) y el consumidor consulta los datos si los necesita","Eventos ligeros"],
+["Transferencia de estado por evento","El evento trae los datos que el consumidor necesita","Evitar que todos consulten al productor"],
+["Event sourcing","Se guarda la secuencia de eventos como fuente de verdad; el estado actual se reconstruye reproduciéndolos","Auditoría completa, reconstruir el estado en cualquier fecha (banca, contabilidad)"],
+["CQRS","Separar el modelo de escritura (comandos) del de lectura (consultas), a menudo sincronizados con eventos","Muchas más lecturas que escrituras, o vistas de lectura muy distintas"]])}
+${note("Cuándo elegir EDA: varios sistemas deben reaccionar al mismo hecho, se quiere agregar consumidores sin modificar al productor, hay picos de carga que conviene amortiguar con una cola, o integración en tiempo real (IoT, pagos, logística). Cuándo no: flujos simples en los que el usuario necesita la respuesta completa al instante y una llamada directa basta.")}`],
 ["ATAM paso a paso",`<p>Un banco evalúa la arquitectura de su nueva app antes de construirla. No pregunta “¿es buena?”, sino “¿cumple los atributos que nos importan y qué decisiones los ponen en riesgo?”. Eso es <b>ATAM</b> (Architecture Tradeoff Analysis Method).</p>
 <ol><li><b>Presentar</b> el método, los objetivos de negocio y la arquitectura.</li><li><b>Identificar los enfoques</b> arquitectónicos (estilos y tácticas usados).</li><li><b>Construir el árbol de utilidad</b>: atributos de calidad → refinamientos → escenarios concretos, priorizados por importancia y dificultad.</li><li><b>Analizar</b> cómo responde la arquitectura a cada escenario.</li><li><b>Lluvia de ideas</b> de escenarios con todos los interesados y nueva priorización.</li><li><b>Presentar resultados</b>.</li></ol>
 <p>Un <b>escenario de calidad</b> tiene seis partes: fuente del estímulo, estímulo, entorno, artefacto, respuesta y medida de la respuesta. Ejemplo: “En hora pico (entorno), si falla un servidor de aplicaciones (estímulo), el sistema (artefacto) redirige el tráfico (respuesta) sin perder sesiones y en menos de 5 s (medida)”.</p>
